@@ -1,0 +1,1715 @@
+---
+title: "Linear Regression"
+author: "Alexandre Sauze"
+date: "2023-12-03"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Section 1: Introduction to Regression
+
+Install the required packages: 
+- Lahman
+- tidyverse
+- dslabs
+
+```{r}
+library(Lahman)
+library(tidyverse)
+library(dslabs)
+ds_theme_set()
+```
+
+
+## 1.1: Baseball as a Motivating Example
+
+### Bases on Balls or Stolen Bases?
+
+**Code:** Scatterplot of the relationship between HRs and wins
+
+```{r}
+Teams %>% filter(yearID %in% 1961:2001) %>%
+  mutate(HR_per_game = HR / G, R_per_game = R / G) %>%
+  ggplot(aes(HR_per_game, R_per_game)) +
+  geom_point(alpha = 0.5)
+```
+
+**Code:** Scatterplot of the relationship between stolen bases and wins
+
+```{r}
+Teams %>% filter(yearID %in% 1961:2001) %>%
+    mutate(SB_per_game = SB / G, R_per_game = R / G) %>%
+    ggplot(aes(SB_per_game, R_per_game)) + 
+    geom_point(alpha = 0.5)
+```
+
+**Code:** Scatterplot of the relationship between bases on balls and runs
+
+```{r}
+Teams %>% filter(yearID %in% 1961:2001) %>%
+    mutate(BB_per_game = BB / G, R_per_game = R / G) %>%
+    ggplot(aes(BB_per_game, R_per_game)) + 
+    geom_point(alpha = 0.5)
+```
+
+
+### Assessment: Baseball as a Motivating Example
+
+#### Question 1
+**Q.** What is the application of statistics and data science to baseball called?
+**A.** Sabermetrics
+
+#### Question 2
+**Q.** Which of the following outcomes is not included in the batting average?
+**A.** A base on balls
+
+#### Question 3
+**Q.** Why do we consider team statistics as well as individual player statistics?
+**A.** The success of any individual player also depends on the strength of their team.
+
+#### Question 4
+**Q.** You want to know whether teams with more at-bats per game have more runs per game.
+What R code below correctly makes a scatter plot for this relationship?
+**A.** 
+```{r}
+Teams %>% filter(yearID %in% 1961:2001 ) %>%
+    mutate(AB_per_game = AB/G, R_per_game = R/G) %>%
+    ggplot(aes(AB_per_game, R_per_game)) + 
+    geom_point(alpha = 0.5)
+```
+
+#### Question 5
+**Q.** What does the variable “SOA” stand for in the Teams table?
+**A.** strikeouts by pitchers
+
+#### Question 6
+**Q.** Load the Lahman library. Filter the Teams data frame to include years from 1961 to 2001. Make a scatterplot of runs per game versus at bats (AB) per game.
+Which of the following is true?
+**A.**
+```{r}
+Teams %>% filter(yearID %in% 1961:2001) %>%
+  mutate(R_per_game = R/G, AB_per_game = AB/G) %>%
+  ggplot(aes(R_per_game, AB_per_game)) +
+  geom_point(alpha = 0.5)
+```
+As the number of at bats per game increases, the number of runs per game tends to increase.
+
+#### Question 7
+**Q.** Use the filtered Teams data frame from Question 6. Make a scatterplot of win rate (number of wins per game) versus number of fielding errors (E) per game.
+Which of the following is true?
+**A.**
+```{r}
+Teams %>% filter(yearID %in% 1961:2001) %>%
+  mutate(W_per_game = W/G, E_per_game = E/G) %>%
+  ggplot(aes(E_per_game, W_per_game)) +
+  geom_point(alpha = 0.5)
+```
+As the number of errors per game increases, the win rate tends to decrease.
+
+#### Question 8
+**Q.** Use the filtered Teams data frame from Question 6. Make a scatterplot of triples (X3B) per game versus doubles (X2B) per game.
+Which of the following is true?
+**A.** 
+```{r}
+Teams %>% filter(yearID %in% 1961:2001) %>%
+  mutate(X3B_per_game = X3B/G, X2B_per_game = X2B/G) %>%
+  ggplot(aes(X2B_per_game, X3B_per_game)) +
+  geom_point(alpha = 0.5)
+```
+There is no clear relationship between doubles per game and triples per game.
+
+
+## 1.2: Correlation
+
+### Correlation
+
+- Galton tried to predict sons' heights based on fathers' heights.
+- The mean and standard errors are insufficient for describing an important characteristic of the data: the trend that the taller the father, the taller the son.
+- The correlation coefficient is an informative summary of how two variables move together that can be used to predict one variable using the other.
+
+```{r}
+# create the dataset
+library(tidyverse)
+library(HistData)
+data("GaltonFamilies")
+set.seed(1983)
+galton_heights <- GaltonFamilies %>%
+  filter(gender == "male") %>%
+  group_by(family) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  select(father, childHeight) %>%
+  rename(son = childHeight)
+
+# means and standard deviations
+galton_heights %>%
+    summarize(mean(father), sd(father), mean(son), sd(son))
+
+# scatterplot of father and son heights
+galton_heights %>%
+    ggplot(aes(father, son)) +
+    geom_point(alpha = 0.5)
+```
+
+### Correlation Coefficient
+
+$\rho=\frac{1}{n} \sum_{i=1}^n \left( \frac{x_i-\mu_x}{\sigma_x} \right) \left( \frac{x_i-\mu_y}{\sigma_y} \right)$
+
+- The correlation coefficient is defined for a list of pairs $(x_1,y_2),...,(x_n,y_n)$ as the sum of the product of the standarized values: $\left( \frac{x_i-\mu_x}{\sigma_x} \right)\left(  \frac{x_i-\mu_x}{\sigma_x} \right)$ for each observation i. The product term is positive when both the standardized x and y are positive or when they are both negative, and the product term is negative when the standardized x and y have different signs (one is positive and one is negative).
+- The greek letter $\rho$ is typically used to denote the correlation.
+- The correlation coefficient essentially conveys how two variables move together. $\rho$ is always between -1 and 1.
+```{r}
+galton_heights <- GaltonFamilies %>%
+  filter(childNum == 1 & gender == "male") %>%
+  select(father,childHeight) %>%
+  rename(son = childHeight)
+
+galton_heights %>% summarize(cor(father, son))
+```
+
+### Sample Correlation is a Random Variable
+
+- The correlation that we compute and use as a summary is a random variable.
+- When interpreting correlations, it is important to remember that correlations derived from samples are estimates containing uncertainty.
+- Because the sample correlation is an average of independent draws, the central limit theorem applies.
+```{r}
+# compute sample correlation
+my_sample <- slice_sample(galton_heights, n = 25, replace = TRUE)
+
+R <- my_sample %>% summarize(cor(father, son))
+
+# Monte Carlo simulation to show distribution of sample correlation
+B <- 1000
+N <- 25
+R <- replicate(B, {
+  slice_sample(galton_heights, n = N, replace = TRUE) %>% 
+    summarize(r=cor(father, son)) %>% .$r
+})
+data.frame(R) %>% ggplot(aes(R)) + geom_histogram(binwidth = 0.05, color = "black")
+
+# expected value is the population correlation
+mean(R)
+# standard error is high relative to its size
+sd(R)
+
+# QQ-plot to evaluate whether N is large enough
+data.frame(R) %>%
+    ggplot(aes(sample = R)) +
+    stat_qq() +
+    geom_abline(intercept = mean(R), slope = sqrt((1-mean(R)^2)/(N-2)))
+```
+### Assessment: Correlation
+
+#### Question 4
+**Q.** Instead of running a Monte Carlo simulation with a sample size of 25 from the 179 father-son pairs described in the videos, imagine we now run the simulation with a sample size of 50. Note: You do not need to run any code to determine the answer to this exercise.
+Would you expect the mean of the sample correlation to increase, decrease, or stay approximately the same?
+**A.** Stay approximately the same
+
+#### Question 5
+**Q.** Instead of running a Monte Carlo simulation with a sample size of 25 from the 179 father-son pairs described in the videos, imagine we now run the simulation with a sample size of 50. Note: You do not need to run any code to determine the answer to this exercise.
+Would you expect the standard deviation of the sample correlation to increase, decrease, or stay approximately the same?
+**A.** Decrease
+
+#### Question 7
+**Q.** Load the Lahman library. Filter the Teams data frame to include years from 1961 to 2001.
+What is the correlation coefficient between number of runs per game and number of at bats per game?
+**A.** 
+```{r}
+Teams %>% filter(yearID %in% 1961:2001) %>%
+  summarize(r=cor(R/G, AB/G))
+```
+
+#### Question 8
+**Q.** What is the correlation coefficient between win rate (number of wins per game) and number of errors per game?
+**A.** 
+```{r}
+Teams %>% filter(yearID %in% 1961:2001) %>%
+  summarize(r=cor(W/G, E/G))
+```
+
+#### Question 9
+**Q.** What is the correlation coefficient between doubles (X2B) per game and triples (X3B) per game?
+**A.** 
+```{r}
+Teams %>% filter(yearID %in% 1961:2001) %>%
+  summarize(r=cor(X2B/G, X3B/G))
+```
+
+
+## 1.3: Stratification and Variance Explained
+
+### Stratification
+
+- The general idea of conditional expectation is that we stratify a population into groups and compute summaries in each group.
+- A practical way to improve the estimates of the conditional expectations is to define strata of with similar values of x.
+- If there is perfect correlation, the regression line predicts an increase that is the same number of SDs for both variables. If there is 0 correlation, then we don’t use x at all for the prediction and simply predict the average $\mu_y$. For values between 0 and 1, the prediction is somewhere in between. If the correlation is negative, we predict a reduction instead of an increase.
+
+#### Intercept is zero and slope is $\rho$ when the variables are standardized
+\
+Recall that, after standardization of a given variable, the mean of the variable will be equal to 0 and the standard deviation will be equal to 1. That is, after standardization, we have $\mu_x=0$, $\mu_y=0$, $\sigma_x=1$, and $\sigma_y=1$. Now, notice that the formula for the slope is given by:
+\
+$m=\rho \frac{\sigma_y}{\sigma_x}$
+\
+and the intercept is given by:
+\
+$b=\mu_y-m\mu_x$
+\
+Now, if we substitute the mean and the standard deviation of the standarized x and y variable, we arrive at slope:
+\
+$m=\rho \times \frac{1}{1}$
+\
+which simplifies to:
+\
+$m=\rho$
+\
+Now, if we substitute this slope into the formula for the receipt, we arrive at:
+\
+$b=0-\rho\times0$
+\
+which simplifies to:
+\
+$b=0-0$
+\
+or $b=0$. Thus, we have shown that the interceipt is zero and slope is $\rho$ once the variables are standarized.
+```{r}
+# number of fathers with height 72 or 72.5 inches
+sum(galton_heights$father == 72)
+sum(galton_heights$father == 72.5)
+
+# predicted height of a son with a 72 inch tall father
+conditional_avg <- galton_heights %>%
+    filter(round(father) == 72) %>%
+    summarize(avg = mean(son)) %>%
+    pull(avg)
+conditional_avg
+
+# stratify fathers' heights to make a boxplot of son heights
+galton_heights %>% mutate(father_strata = factor(round(father))) %>%
+    ggplot(aes(father_strata, son)) +
+    geom_boxplot() +
+    geom_point()
+
+# center of each boxplot
+galton_heights %>%
+    mutate(father = round(father)) %>%
+    group_by(father) %>%
+    summarize(son_conditional_avg = mean(son)) %>%
+    ggplot(aes(father, son_conditional_avg)) +
+    geom_point()
+
+# add regression line to standardized data
+r <- galton_heights %>% summarize(r = cor(father, son)) %>% pull(r)
+
+galton_heights %>% 
+  mutate(father = scale(father), son = scale(son)) %>%
+  mutate(father = round(father)) %>%
+  group_by(father) %>%
+  summarize(son = mean(son)) %>%
+  ggplot(aes(father, son)) + 
+  geom_point() +
+  geom_abline(intercept = 0, slope = r)
+  
+# add regression line to original data
+mu_x <- mean(galton_heights$father)
+mu_y <- mean(galton_heights$son)
+s_x <- sd(galton_heights$father)
+s_y <- sd(galton_heights$son)
+r <- cor(galton_heights$father, galton_heights$son)
+m <-  r * s_y / s_x
+b <- mu_y - m*mu_x
+
+galton_heights %>% 
+  ggplot(aes(father, son)) + 
+  geom_point(alpha = 0.5) +
+  geom_abline(intercept = b, slope = m )
+  
+# plot in standard units and see that intercept is 0 and slope is rho
+galton_heights %>% 
+  ggplot(aes(scale(father), scale(son))) + 
+  geom_point(alpha = 0.5) +
+  geom_abline(intercept = 0, slope = r)
+```
+
+### Bivariate Normal Distribution
+
+- When a pair of random variables are approximated by the bivariate normal distribution, scatterplots look like ovals. They can be thin (high correlation) or circle-shaped (no correlation).
+- When two variables follow a bivariate normal distribution, computing the regression line is equivalent to computing conditional expectations.
+- We can obtain a much more stable estimate of the conditional expectation by finding the regression line and using it to make predictions. \
+#### Key equations \
+Conditional distribution \
+$f_{Y|X=x}$ is the conditional distribution and $E\left( Y|X=x \right)$ is the conditional expected value. \
+Expected value ($X$ is random variable and $x$ is a fixed value that we pick) \
+$E\left( Y|X=x \right) = \mu_Y + \rho \frac{X-\mu_X}{\sigma_X}\sigma_y$ \
+Same as the regression line \
+$\frac{E\left ( Y|X=x \right)-\mu_Y}{\sigma_Y} = \rho \frac{x-\mu_X}{\sigma_X}$
+
+```{r}
+galton_heights %>%
+  mutate(z_father = round((father - mean(father))/sd(father))) %>%
+  filter(z_father %in% -2:2) %>%
+  ggplot() +  
+  stat_qq(aes(sample=son)) +
+  facet_wrap(~z_father)
+```
+
+### Variance Explained
+
+- Conditioning on a random variable X can help to reduce variance of response variable Y.
+- The standard deviation of the conditional distribution is $SD\left( Y|X=x \right) = \sigma_y \sqrt{1-\rho^2}$, which is smaller tha the standard deviation without conditioning $\sigma_y$
+- The variance is the square of the 'sd' so $\sigma_y^2 \left( 1-\rho^2 \right)$.
+- In the statement "X explains such and such percent of the variability," the percent value refers to the variance. The variance decreases by $\rho^2$ percent.
+- The “variance explained” statement only makes sense when the data is approximated by a bivariate normal distribution.
+
+
+### There are Two Regression Lines
+
+```{r}
+# compute a regression line to predict the son's height from the father's height
+mu_x <- mean(galton_heights$father)
+mu_y <- mean(galton_heights$son)
+s_x <- sd(galton_heights$father)
+s_y <- sd(galton_heights$son)
+r <- cor(galton_heights$father, galton_heights$son)
+m <-  r * s_y / s_x
+b <- mu_y - m*mu_x
+
+# compute a regression line to predict the father's height from the son's height
+m <-  r * s_x / s_y
+b <- mu_x - m*mu_y
+```
+
+
+### Assessment: Stratification and Variance Explained, Part 2
+
+In the second part of this assessment, you'll analyze a set of mother and daughter heights, also from GaltonFamilies.
+
+Define female_heights, a set of mother and daughter heights sampled from GaltonFamilies, as follows:
+
+```{r}
+set.seed(1989) #if you are using R 3.5 or earlier
+set.seed(1989, sample.kind="Rounding") #if you are using R 3.6 or later
+library(HistData)
+data("GaltonFamilies")
+
+female_heights <- GaltonFamilies%>%     
+    filter(gender == "female") %>%     
+    group_by(family) %>%     
+    sample_n(1) %>%     
+    ungroup() %>%     
+    select(mother, childHeight) %>%     
+    rename(daughter = childHeight)
+```
+
+
+#### Question 8
+**Q.** Calculate the mean and standard deviation of mothers' heights, the mean and standard deviation of daughters' heights, and the correlaton coefficient between mother and daughter heights.
+**A.** \
+Mean of mothers' heights: 
+```{r}
+mum <- mean(female_heights$mother)
+```
+Standard deviation of mothers' heights:
+```{r}
+sm <- sd(female_heights$mother)
+```
+Mean of daughters' heights:
+```{r}
+mud <- mean(female_heights$daughter)
+```
+Standard deviation of daughters' heights:
+```{r}
+sda <- sd(female_heights$daughter)
+```
+Correlation coefficient:
+```{r}
+rho <- cor(female_heights$mother, female_heights$daughter)
+```
+
+#### Question 9
+**Q.** Calculate the slope and intercept of the regression line predicting daughters' heights given mothers' heights. Given an increase in mother's height by 1 inch, how many inches is the daughter's height expected to change?
+
+Slope of regression line predicting daughters' height from mothers' heights
+```{r}
+m <- rho * sda / sm
+```
+
+Intercept of regression line predicting daughters' height from mothers' heights
+```{r}
+b <- mud - m*mum
+```
+
+Change in daughter's height in inches given a 1 inch increase in the mother's height
+```{r}
+rho * sda/sm
+```
+
+#### Question 10
+**Q.** What percent of the variability in daughter heights is explained by the mother's height?
+**A.** 
+```{r}
+rho^2 *100 #We multiply 100 for percentage
+```
+
+#### Question 11
+**Q.** A mother has a height of 60 inches.
+Using the regression formula, what is the conditional expected value of her daughter's height given the mother's height?
+**A.** 
+```{r}
+Xx <- 60
+mean(mud + rho * ((Xx-mum)/(sm)) * sda)
+```
+
+
+
+
+# Section 2: Linear Models
+```{r}
+library(tidyverse)
+library(Lahman)
+library(HistData)
+library(gridExtra)
+```
+
+
+
+## 2.1: Introduction to Linear Models
+
+
+### Confounding: Are BBs More Predictive?
+
+Remember: Association is not causation
+Regression can help us account for confounding.
+```{r}
+# find regression line for predicting runs from BBs (not shown in video)
+get_slope <- function(x, y) cor(x, y) * sd(y) / sd(x)
+
+bb_slope <- Teams %>% 
+  filter(yearID %in% 1961:2001 ) %>% 
+  mutate(BB_per_game = BB/G, R_per_game = R/G) %>% 
+  summarize(slope = get_slope(BB_per_game, R_per_game))
+
+bb_slope 
+
+# compute regression line for predicting runs from singles (not shown in video)
+singles_slope <- Teams %>% 
+  filter(yearID %in% 1961:2001 ) %>%
+  mutate(Singles_per_game = (H-HR-X2B-X3B)/G, R_per_game = R/G) %>%
+  summarize(slope = get_slope(Singles_per_game, R_per_game))
+
+singles_slope 
+
+# calculate correlation between HR, BB, and singles
+Teams %>% 
+  filter(yearID %in% 1961:2001 ) %>% 
+  mutate(Singles = (H-HR-X2B-X3B)/G, BB = BB/G, HR = HR/G) %>%  
+  summarize(cor(BB, HR), cor(Singles, HR), cor(BB,Singles))
+```
+
+
+### Stratification and Multivariate Regression
+
+- A first approach to check confounding is to keep HRs fixed at a certain value and then examine the relationship between BB and runs.
+- The slopes of BB after stratifying on HR are reduced, but they are not 0, which indicates that BB are helpful for producing runs, just not as much as previously thought.
+```{r}
+# stratify HR per game to nearest 10, filter out strata with few points
+dat <- Teams %>% filter(yearID %in% 1961:2001) %>%
+  mutate(HR_strata = round(HR/G, 1), 
+         BB_per_game = BB / G,
+         R_per_game = R / G) %>%
+  filter(HR_strata >= 0.4 & HR_strata <=1.2)
+  
+# scatterplot for each HR stratum
+dat %>% 
+  ggplot(aes(BB_per_game, R_per_game)) +  
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm") +
+  facet_wrap( ~ HR_strata)
+  
+# calculate slope of regression line after stratifying by HR
+dat %>%  
+  group_by(HR_strata) %>%
+  summarize(slope = cor(BB_per_game, R_per_game)*sd(R_per_game)/sd(BB_per_game))
+
+# stratify by BB
+dat <- Teams %>% filter(yearID %in% 1961:2001) %>%
+  mutate(BB_strata = round(BB/G, 1), 
+         HR_per_game = HR / G,
+         R_per_game = R / G) %>%
+  filter(BB_strata >= 2.8 & BB_strata <=3.9) 
+
+# scatterplot for each BB stratum
+dat %>% ggplot(aes(HR_per_game, R_per_game)) +  
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm") +
+  facet_wrap( ~ BB_strata)
+  
+# slope of regression line after stratifying by BB
+dat %>%  
+  group_by(BB_strata) %>%
+  summarize(slope = cor(HR_per_game, R_per_game)*sd(R_per_game)/sd(HR_per_game)) 
+```
+
+
+### Linear Models
+
+- “Linear” here does not refer to lines, but rather to the fact that the conditional expectation is a linear combination of known quantities.
+- In Galton's model, we assume $Y$ (son's height) is a linear combination of a constant and $X$ (father's height) plus random noise. We further assume that $\epsilon_i$ are independent from each other, have expected value 0 and the standard deviation $\sigma$ which does not depend on i.
+- Note that if we further assume that $\epsilon$ is normally distributed, then the model is exactly the same one we derived earlier by assuming bivariate normal data.
+- We can substract the mean from $X$ to make $\beta_0$ more interpretable.
+
+
+
+## 2.2: Least Squares Estimates
+
+
+### Least Squares Estimates (LSE)
+
+- For regression, we aim to find the coefficient values that minimize the distance of the fitted model to the data.
+- Residual sum of squares (RSS) measures the distance between the true value and the predicted value given by the regression line. The values that minimize the RSS are called the least squares estimates (LSE).
+- We can use partial derivatives to get the values for $\beta_0$ and $\beta_1$ in Galton's data.
+```{r}
+# compute RSS for any pair of beta0 and beta1 in Galton's data
+library(HistData)
+data("GaltonFamilies")
+set.seed(1983)
+galton_heights <- GaltonFamilies %>%
+  filter(gender == "male") %>%
+  group_by(family) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  select(father, childHeight) %>%
+  rename(son = childHeight)
+rss <- function(beta0, beta1){
+    resid <- galton_heights$son - (beta0+beta1*galton_heights$father)
+    return(sum(resid^2))
+}
+
+# plot RSS as a function of beta1 when beta0=25
+beta1 = seq(0, 1, len=nrow(galton_heights))
+results <- data.frame(beta1 = beta1,
+                      rss = sapply(beta1, rss, beta0 = 25))
+
+results %>% ggplot(aes(beta1, rss)) + geom_line() +
+  geom_line(aes(beta1, rss))
+```
+
+
+### The lm Function
+
+- When calling the lm() function, the variable that we want to predict is put to the left of the ~ symbol, and the variables that we use to predict is put to the right of the ~ symbol. The intercept is added automatically.
+- LSEs are random variables as they are derived from samples.
+```{r}
+# fit regression line to predict son's height from father's height
+fit <- lm(son ~ father, data = galton_heights)
+fit
+
+# summary statistics
+summary(fit)
+```
+
+
+### LSE are Random Variables
+
+- $\beta_0$ and $\beta_1$ appear to be normally distributed because the central limit theorem plays a role.
+- The t-statistic depends on the assumption that $\epsilon$ follows a normal distribution.
+```{r}
+# Monte Carlo simulation
+B <- 1000
+N <- 50
+lse <- replicate(B, {
+  sample_n(galton_heights, N, replace = TRUE) %>% 
+    lm(son ~ father, data = .) %>% 
+    .$coef 
+})
+lse <- data.frame(beta_0 = lse[1,], beta_1 = lse[2,])
+
+# Plot the distribution of beta_0 and beta_1
+library(gridExtra)
+p1 <- lse %>% ggplot(aes(beta_0)) + geom_histogram(binwidth = 5, color = "black") 
+p2 <- lse %>% ggplot(aes(beta_1)) + geom_histogram(binwidth = 0.1, color = "black") 
+grid.arrange(p1, p2, ncol = 2)
+
+# summary statistics
+sample_n(galton_heights, N, replace = TRUE) %>% 
+  lm(son ~ father, data = .) %>% 
+  summary %>%
+  .$coef
+  
+lse %>% summarize(se_0 = sd(beta_0), se_1 = sd(beta_1))
+```
+
+
+### Advanced Note on LSE
+
+Although interpretation is not straight-forward, it is also useful to know that the LSE can be strongly correlated, which can be seen using this code:
+```{r}
+lse %>% summarize(cor(beta_0, beta_1))
+```
+However, the correlation depends on how the predictors are defined or transformed. \
+Here we standardize the father heights, which changes $x_i$ to $x_i-\bar{x}$.
+```{r}
+B <- 1000
+N <- 50
+lse <- replicate(B, {
+      sample_n(galton_heights, N, replace = TRUE) %>%
+      mutate(father = father - mean(father)) %>%
+      lm(son ~ father, data = .) %>% .$coef 
+})
+```
+Observe what happens to the correlation in this case:
+```{r}
+cor(lse[1,], lse[2,]) 
+```
+
+
+### Predicted Variables are Random Variables
+
+- The predicted value is often denoted as $\hat{Y}$, which is a random variable. Mathematical theory tells us what the standard error of the predicted value is.
+- The predict() function in R can give us predictions directly.
+```{r}
+# plot predictions and confidence intervals
+galton_heights %>% ggplot(aes(father, son)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+  
+# predict Y directly
+fit <- galton_heights %>% lm(son ~ father, data = .) 
+Y_hat <- predict(fit, se.fit = TRUE)
+names(Y_hat)
+
+# plot best fit line
+galton_heights %>%
+  mutate(Y_hat = predict(lm(son ~ father, data=.))) %>%
+  ggplot(aes(father, Y_hat))+
+  geom_line()
+```
+
+
+### Assessment: Least Squares Estimates, part 1
+
+#### Question 3
+**Q.** Load the Lahman library and filter the Teams data frame to the years 1961-2001. Mutate the dataset to create variables for bases on balls per game, runs per game, and home runs per game, then run a linear model in R predicting the number of runs per game based on both the number of bases on balls per game and the number of home runs per game.
+What is the coefficient for bases on balls per game?
+**A.** 
+```{r}
+library(Lahman)
+fit <- Teams %>% filter(yearID %in% 1961:2001) %>%
+  mutate(BBG = BB/G, RG = R/G, HRG = HR/G)
+lm(RG ~ BBG + HRG, data = fit)
+
+## Or
+
+library(Lahman)
+library(broom)
+Teams_small <- Teams %>% filter(yearID %in% 1961:2001)
+Teams_small %>% mutate(R_per_game = R/G, BB_per_game = BB/G, HR_per_game = HR/G) %>% do(tidy(lm(R_per_game ~ BB_per_game + HR_per_game, data = .)))
+```
+
+
+### Assessment: Least Squares Estimates, part 2
+```{r}
+set.seed(1989) #if you are using R 3.5 or earlier
+set.seed(1989, sample.kind="Rounding") #if you are using R 3.6 or later
+library(HistData)
+data("GaltonFamilies")
+options(digits = 3)    # report 3 significant digits
+
+female_heights <- GaltonFamilies %>%     
+    filter(gender == "female") %>%     
+    group_by(family) %>%     
+    sample_n(1) %>%     
+    ungroup() %>%     
+    select(mother, childHeight) %>%     
+    rename(daughter = childHeight)
+```
+
+#### Question 7
+**Q.** Fit a linear regression model predicting the mothers' heights using daughters' heights.
+What is the slope of the model?
+**A.** 
+```{r}
+lm(mother ~ daughter, data = female_heights)
+```
+#### Question 8
+**Q.** Predict mothers' heights using the model from Question 7 and the predict() function.
+What is the predicted height of the first mother in the dataset?
+**A.** 
+```{r}
+model <- lm(mother ~ daughter, data = female_heights)
+
+predictions <- predict(model, interval = c("confidence"), level = 0.95)
+
+data <- as_tibble(predictions) %>% bind_cols(daughter = female_heights$daughter)
+
+head(data)
+head(female_heights)
+
+## Or
+predict(model)
+```
+#### Question 9
+Filter players who appeared more than 100 times in the 2002 season.
+```{r}
+library(Lahman)
+bat_02 <- Batting %>% filter(yearID == 2002) %>%
+    mutate(pa = AB + BB, singles = (H - X2B - X3B - HR)/pa, bb = BB/pa) %>%
+    filter(pa >= 100) %>%
+    select(playerID, singles, bb)
+```
+**Q.**
+Now compute a similar table but with rates computed over 1999-2001. Keep only rows from 1999-2001 where players have 100 or more plate appearances, calculate each player's single rate and BB rate per stint (where each row is one stint - a player can have multiple stints within a season), then calculate the average single rate (mean_singles) and average BB rate (mean_bb) per player over the three year period.
+How many players had a single rate mean_singles of greater than 0.2 per plate appearance over 1999-2001?
+**A.**
+```{r}
+bat_99_01 <- Batting %>% filter(yearID %in% 1999:2001) %>%
+  mutate(pa = AB + BB, singles = (H - X2B - X3B - HR)/pa, bb = BB/pa) %>%
+  filter(pa >= 100) %>%
+  select(playerID, singles, bb)
+
+mean_bat_99_01 <- Batting %>% filter(yearID %in% 1999:2001) %>%
+  mutate(pa = AB + BB, singles = (H - X2B - X3B - HR)/pa, bb = BB/pa) %>%
+  filter(pa >= 100) %>%
+  group_by(playerID) %>%
+  summarize(mean_singles = mean(singles), mean_bb = mean(bb))
+
+sum(mean_bat_99_01$mean_singles > 0.2)
+sum(mean_bat_99_01$mean_bb > 0.2)
+```
+#### Question 10
+**Q.**
+Use inner_join() to combine the bat_02 table with the table of 1999-2001 rate averages you created in the previous question.
+What is the correlation between 2002 singles rates and 1999-2001 average singles rates?
+**A.**
+```{r}
+bat <- inner_join(bat_02, mean_bat_99_01, join_by(playerID))
+cor(bat$singles, bat$mean_singles)
+cor(bat$bb, bat$mean_bb)
+```
+#### Question 11
+**Q.**
+Make scatterplots of mean_singles versus singles and mean_bb versus bb.
+Are either of these distributions bivariate normal?
+**A.**
+```{r}
+bat %>% ggplot(aes(x = mean_singles, y = singles)) +
+  geom_point() + 
+  geom_smooth(method = 'lm')
+  
+bat %>% ggplot(aes(x = mean_bb, y = bb)) +
+  geom_point() + 
+  geom_smooth(method = 'lm')
+```
+#### Question 12
+**Q.**
+Fit a linear model to predict 2002 singles given 1999-2001 mean_singles.
+What is the coefficient of mean_singles, the slope of the fit?
+**A.**
+```{r}
+lm(singles ~ mean_singles, data = bat)
+```
+**Q.**
+Fit a linear model to predict 2002 bb given 1999-2001 mean_bb.
+What is the coefficient of mean_bb, the slope of the fit?
+**A.**
+```{r}
+lm(bb ~ mean_bb, data = bat)
+```
+
+
+
+## 2.3: Advanced dplyr: summarize with functions and broom
+
+
+### Advanced dplyr: summarize with functions and broom
+
+
+```{r}
+# stratify by HR
+dat <- Teams %>% filter(yearID %in% 1961:2001) %>%
+  mutate(HR = round(HR/G, 1), 
+         BB = BB/G,
+         R = R/G) %>%
+  select(HR, BB, R) %>%
+  filter(HR >= 0.4 & HR<=1.2)
+  
+# calculate slope of regression lines to predict runs by BB in different HR strata
+dat %>%  
+  group_by(HR) %>%
+  summarize(slope = cor(BB,R)*sd(R)/sd(BB))
+  
+# use lm to get estimated slopes - lm does not work with grouped tibbles
+dat %>%  
+  group_by(HR) %>%
+  lm(R ~ BB, data = .) %>%
+  .$coef
+  
+# include the lm inside a summarize and it will work
+dat %>%  
+  group_by(HR) %>%
+  summarize(slope = lm(R ~ BB)$coef[2])
+  
+# tidy function from broom returns estimates in and information in a data frame
+library(broom)
+fit <- lm(R ~ BB, data = dat)
+tidy(fit)
+
+# add confidence intervals
+tidy(fit, conf.int = TRUE)
+
+# combine with group_by and summarize to get the table we want
+dat %>%  
+  group_by(HR) %>%
+  summarize(tidy(lm(R ~ BB), conf.int = TRUE))
+  
+# it's a data frame so we can filter and select the rows and columns we want
+dat %>%  
+  group_by(HR) %>%
+  summarize(tidy(lm(R ~ BB), conf.int = TRUE)) %>%
+  filter(term == "BB") %>%
+  select(HR, estimate, conf.low, conf.high)
+  
+# visualize the table with ggplot
+dat %>%  
+  group_by(HR) %>%
+  summarize(tidy(lm(R ~ BB), conf.int = TRUE)) %>%
+  filter(term == "BB") %>%
+  select(HR, estimate, conf.low, conf.high) %>%
+  ggplot(aes(HR, y = estimate, ymin = conf.low, ymax = conf.high)) +
+  geom_errorbar() +
+  geom_point()
+
+# EXTRA CODE TO DEMONSTRATE THE USE OF across()
+# Compare the output of the 3 options below:
+dat %>%  
+  group_by(HR) %>%
+  summarize(tidy(lm(R ~ BB, data = .), conf.int = TRUE)) 
+  # Incorrect, will provide identical estimates for all groups
+  
+dat %>%  
+  group_by(HR) %>%
+  summarize(tidy(lm(R ~ BB, data = across()), conf.int = TRUE)) 
+  # Correct option 1, provides distinct estimates for all groups
+  
+dat %>%  
+  group_by(HR) %>%
+  summarize(tidy(lm(R ~ BB), conf.int = TRUE)) 
+  # Correct option 2, provides distinct estimates for all groups
+```
+
+### Assessment: Advanced dplyr, part 2
+We have investigated the relationship between fathers' heights and sons' heights. But what about other parent-child relationships? Does one parent's height have a stronger association with child height? How does the child's gender affect this relationship in heights? Are any differences that we observe statistically significant?\
+
+The galton dataset is a sample of one male and one female child from each family in the GaltonFamilies dataset. The pair column denotes whether the pair is father and daughter, father and son, mother and daughter, or mother and son.\
+
+Create the galton dataset using the code below:
+```{r}
+library(tidyverse)
+library(HistData)
+data("GaltonFamilies")
+# set.seed(1) # if you are using R 3.5 or earlier
+set.seed(1, sample.kind = "Rounding") # if you are using R 3.6 or later
+galton <- GaltonFamilies %>%
+    group_by(family, gender) %>%
+    sample_n(1) %>%
+    ungroup() %>% 
+    gather(parent, parentHeight, father:mother) %>%
+    mutate(child = ifelse(gender == "female", "daughter", "son")) %>%
+    unite(pair, c("parent", "child"))
+
+galton
+```
+
+#### Question 8
+Group by pair and summarize the number of observations in each group.\
+How many father-daughter pairs are in the dataset?\
+How many mother-son pairs are in the dataset?
+```{r}
+galton %>% group_by(pair) %>%
+  summarise(n = n())
+```
+
+#### Question 9
+Calculate the correlation coefficients for fathers and daughters, fathers and sons, mothers and daughters and mothers and sons.
+Which pair has the strongest correlation in heights?
+```{r}
+galton %>% group_by(pair) %>% summarise(cor(parentHeight, childHeight))
+galton
+```
+
+#### Question 10a
+
+What is the estimate of the father-daughter coefficient?
+```{r}
+library(broom)
+galton %>% 
+  filter(pair == 'father_daughter') %>% 
+  do(tidy(lm(childHeight ~ parentHeight, data = .), conf.int = TRUE))
+```
+For every 1-inch increase in mother's height, how many inches does the typical son's height increase?
+```{r}
+galton %>%
+  filter(pair == 'mother_son') %>%
+  do(tidy(lm(childHeight ~ parentHeight, data = .), conf.int = TRUE))
+```
+
+#### Question 10b
+
+Which sets of parent-child heights are significantly correlated at a p-value cut off of 0.05?
+```{r}
+galton %>% group_by(pair) %>%
+  do(tidy(lm(childHeight ~ parentHeight, data = .), conf.int = TRUE)) %>%
+  filter(term == 'parentHeight')
+# All p values are < 0.05
+```
+
+
+
+## 2.4: Regression and Baseball
+
+
+### Building a Better Offensive Metric for Baseball
+
+```{r}
+# linear regression with two variables
+library(Lahman)
+fit <- Teams %>% 
+  filter(yearID %in% 1961:2001) %>% 
+  mutate(BB = BB/G, HR = HR/G,  R = R/G) %>%  
+  lm(R ~ BB + HR, data = .)
+  tidy(fit, conf.int = TRUE)
+  
+# regression with BB, singles, doubles, triples, HR
+fit <- Teams %>% 
+  filter(yearID %in% 1961:2001) %>% 
+  mutate(BB = BB / G, 
+         singles = (H - X2B - X3B - HR) / G, 
+         doubles = X2B / G, 
+         triples = X3B / G, 
+         HR = HR / G,
+         R = R / G) %>%  
+  lm(R ~ BB + singles + doubles + triples + HR, data = .)
+coefs <- tidy(fit, conf.int = TRUE)
+coefs
+
+# predict number of runs for each team in 2002 and plot
+Teams %>% 
+  filter(yearID %in% 2002) %>% 
+  mutate(BB = BB/G, 
+         singles = (H-X2B-X3B-HR)/G, 
+         doubles = X2B/G, 
+         triples =X3B/G, 
+         HR=HR/G,
+         R=R/G)  %>% 
+  mutate(R_hat = predict(fit, newdata = .)) %>%
+  ggplot(aes(R_hat, R, label = teamID)) + 
+  geom_point() +
+  geom_text(nudge_x=0.1, cex = 2) + 
+  geom_abline()
+  
+# average number of team plate appearances per game
+pa_per_game <- Batting %>% filter(yearID == 2002) %>% 
+  group_by(teamID) %>%
+  summarize(pa_per_game = sum(AB+BB)/max(G)) %>% 
+  pull(pa_per_game) %>% 
+  mean
+  
+# compute per-plate-appearance rates for players available in 2002 using previous data
+players <- Batting %>% filter(yearID %in% 1999:2001) %>% 
+  group_by(playerID) %>%
+  mutate(PA = BB + AB) %>%
+  summarize(G = sum(PA)/pa_per_game,
+    BB = sum(BB)/G,
+    singles = sum(H-X2B-X3B-HR)/G,
+    doubles = sum(X2B)/G, 
+    triples = sum(X3B)/G, 
+    HR = sum(HR)/G,
+    AVG = sum(H)/sum(AB),
+    PA = sum(PA)) %>%
+  filter(PA >= 300) %>%
+  select(-G) %>%
+  mutate(R_hat = predict(fit, newdata = .))
+  
+# plot player-specific predicted runs
+qplot(R_hat, data = players, geom = "histogram", binwidth = 0.5, color = I("black"))
+
+# add 2002 salary of each player
+players <- Salaries %>% 
+  filter(yearID == 2002) %>%
+  select(playerID, salary) %>%
+  right_join(players, by="playerID")
+  
+# add defensive position
+position_names <- c("G_p","G_c","G_1b","G_2b","G_3b","G_ss","G_lf","G_cf","G_rf")
+tmp_tab <- Appearances %>% 
+  filter(yearID == 2002) %>% 
+  group_by(playerID) %>%
+  summarize_at(position_names, sum) %>%
+  ungroup()  
+pos <- tmp_tab %>%
+  select(position_names) %>%
+  apply(., 1, which.max) 
+players <- data_frame(playerID = tmp_tab$playerID, POS = position_names[pos]) %>%
+  mutate(POS = str_to_upper(str_remove(POS, "G_"))) %>%
+  filter(POS != "P") %>%
+  right_join(players, by="playerID") %>%
+  filter(!is.na(POS)  & !is.na(salary))
+  
+# add players' first and last names
+# NOTE: In old versions of the Lahman library, the "People" dataset was called "Master"
+# The following code may need to be modified if you have not recently updated the Lahman library.
+players <- People %>%
+  select(playerID, nameFirst, nameLast, debut) %>%
+  mutate(debut = as.Date(debut)) %>%
+  right_join(players, by="playerID")
+  
+# top 10 players
+players %>% select(nameFirst, nameLast, POS, salary, R_hat) %>% 
+  arrange(desc(R_hat)) %>% 
+  top_n(10) 
+  
+# players with a higher metric have higher salaries
+players %>% ggplot(aes(salary, R_hat, color = POS)) + 
+  geom_point() +
+  scale_x_log10()
+  
+# remake plot without players that debuted after 1998
+library(lubridate)
+players %>% filter(year(debut) < 1998) %>%
+ ggplot(aes(salary, R_hat, color = POS)) + 
+  geom_point() +
+  scale_x_log10()
+```
+
+
+### Building a Better Offensive Metric for Baseball: Linear Programming
+
+A way to actually pick the players for the team can be done using what computer scientists call linear programming. Although we don't go into this topic in detail in this course, we include the code anyway:
+```{r}
+library(reshape2)
+library(lpSolve)
+
+players <- players %>% filter(debut <= "1997-01-01" & debut > "1988-01-01")
+constraint_matrix <- acast(players, POS ~ playerID, fun.aggregate = length, value.var = 'R_hat')
+npos <- nrow(constraint_matrix)
+constraint_matrix <- rbind(constraint_matrix, salary = players$salary)
+constraint_dir <- c(rep("==", npos), "<=")
+constraint_limit <- c(rep(1, npos), 50*10^6)
+lp_solution <- lp("max", players$R_hat,
+                  constraint_matrix, constraint_dir, constraint_limit,
+                  all.int = TRUE) 
+```
+This algorithm chooses these 9 players: (We actually get 8, maybe the code is wrong or the data was modified.)
+```{r}
+our_team <- players %>%
+  filter(lp_solution$solution == 1) %>%
+  arrange(desc(R_hat))
+our_team %>% select(nameFirst, nameLast, POS, salary, R_hat)
+```
+
+```{r}
+my_scale <- function(x) (x - median(x))/mad(x)
+players %>% mutate(BB = my_scale(BB), 
+                   singles = my_scale(singles),
+                   doubles = my_scale(doubles),
+                   triples = my_scale(triples),
+                   HR = my_scale(HR),
+                   AVG = my_scale(AVG),
+                   R_hat = my_scale(R_hat)) %>%
+    filter(playerID %in% our_team$playerID) %>%
+    select(nameFirst, nameLast, BB, singles, doubles, triples, HR, AVG, R_hat) %>%
+    arrange(desc(R_hat))
+```
+
+
+### Regression Fallacy
+
+Regression can bring about errors in reasoning, especially when interpreting individual observations.
+The example showed in the video demonstrates that the "sophomore slump" observed in the data is caused by regressing to the mean.\
+The code to create a table with player ID, their names, and their most played position:
+```{r}
+library(Lahman)
+playerInfo <- Fielding %>%
+    group_by(playerID) %>%
+    arrange(desc(G)) %>%
+    slice(1) %>%
+    ungroup %>%
+    left_join(People, by="playerID") %>%
+    select(playerID, nameFirst, nameLast, POS)
+```
+The code to create a table with only the ROY award winners and add their batting statistics:
+```{r}
+ROY <- AwardsPlayers %>%
+    filter(awardID == "Rookie of the Year") %>%
+    left_join(playerInfo, by="playerID") %>%
+    rename(rookie_year = yearID) %>%
+    right_join(Batting, by="playerID") %>%
+    mutate(AVG = H/AB) %>%
+    filter(POS != "P")
+```
+The code to keep only the rookie and sophomore seasons and remove players who did not play sophomore seasons:
+```{r}
+ROY <- ROY %>%
+    filter(yearID == rookie_year | yearID == rookie_year+1) %>%
+    group_by(playerID) %>%
+    mutate(rookie = ifelse(yearID == min(yearID), "rookie", "sophomore")) %>%
+    filter(n() == 2) %>%
+    ungroup %>%
+    select(playerID, rookie_year, rookie, nameFirst, nameLast, AVG)
+```
+The code to use the spread function to have one column for the rookie and sophomore years batting averages:
+```{r}
+ROY <- ROY %>% spread(rookie, AVG) %>% arrange(desc(rookie))
+ROY
+```
+The code to calculate the proportion of players who have a lower batting average their sophomore year:
+```{r}
+mean(ROY$sophomore - ROY$rookie <= 0)
+```
+The code to do the similar analysis on all players that played the 2013 and 2014 seasons and batted more than 130 times (minimum to win Rookie of the Year):
+```{r}
+two_years <- Batting %>%
+    filter(yearID %in% 2013:2014) %>%
+    group_by(playerID, yearID) %>%
+    filter(sum(AB) >= 130) %>%
+    summarize(AVG = sum(H)/sum(AB)) %>%
+    ungroup %>%
+    spread(yearID, AVG) %>%
+    filter(!is.na(`2013`) & !is.na(`2014`)) %>%
+    left_join(playerInfo, by="playerID") %>%
+    filter(POS!="P") %>%
+    select(-POS) %>%
+    arrange(desc(`2013`)) %>%
+    select(nameFirst, nameLast, `2013`, `2014`)
+two_years
+```
+The code to see what happens to the worst performers of 2013:
+```{r}
+arrange(two_years, `2013`)
+```
+The code to see  the correlation for performance in two separate years:
+```{r}
+qplot(`2013`, `2014`, data = two_years)
+
+summarize(two_years, cor(`2013`,`2014`))
+```
+
+
+### Measurement Error Models
+
+Up to now, all our linear regression examples have been applied to two or more random variables. We assume the pairs are bivariate normal and use this to motivate a linear model.\
+Another use for linear regression is with measurement error models, where it is common to have a non-random covariate (such as time). Randomness is introduced from measurement error rather than sampling or natural variability.\
+The code to use dslabs function rfalling_object to generate simulations of dropping balls:
+```{r}
+library(dslabs)
+falling_object <- rfalling_object()
+```
+The code to draw the trajectory of the ball:
+```{r}
+falling_object %>%
+    ggplot(aes(time, observed_distance)) +
+    geom_point() +
+    ylab("Distance in meters") +
+    xlab("Time in seconds")
+```
+The code to use the lm() function to estimate the coefficients:
+```{r}
+library(broom)
+fit <- falling_object %>%
+    mutate(time_sq = time^2) %>%
+    lm(observed_distance~time+time_sq, data=.)
+
+tidy(fit)
+```
+The code to check if the estimated parabola fits the data:
+```{r}
+augment(fit) %>%
+    ggplot() +
+    geom_point(aes(time, observed_distance)) +
+    geom_line(aes(time, .fitted), col = "blue")
+```
+The code to see the summary statistic of the regression:
+```{r}
+tidy(fit, conf.int = TRUE)
+```
+
+
+### Assessment: Regression and Baseball, part 2
+
+Use the Teams data frame from the Lahman package. Fit a multivariate linear regression model to obtain the effects of BB and HR on Runs (R) in 1971. Use the tidy() function in the broom package to obtain the results in a data frame.
+
+```{r}
+library(Lahman)
+library(broom)
+fit <- Teams %>% filter(yearID == 1971) %>% lm(R ~ BB + HR, data = .) %>% tidy()
+fit
+```
+
+
+#### Question 9a
+What is the estimate for the effect of BB on runs?
+```{r}
+fit %>% filter(term == 'BB') %>% select(term, estimate)
+```
+What is the estimate for the effect of HR on runs?
+```{r}
+fit %>% filter(term == 'HR') %>% select(term, estimate)
+```
+
+#### Question 9b
+
+Interpret the p-values for the estimates using a cutoff of 0.05 and considering the year 1971 as a sample to make inference on the population of all baseball games across years.
+
+Which of the following is the correct interpretation?
+```{r}
+fit %>% filter(term %in% c('BB','HR')) %>% select(term, p.value)
+```
+
+#### Question 10
+
+Repeat the above exercise to find the effects of BB and HR on runs (R) for every year from 1961 to 2018 using do() and the broom package.
+
+Make a scatterplot of the estimate for the effect of BB on runs over time and add a trend line with confidence intervals.
+```{r}
+fit <- Teams %>% filter(yearID %in% 1961:2018) %>% 
+  group_by(yearID) %>%
+  do(tidy(lm(R ~ BB + HR, data = .))) %>%
+  ungroup()
+fit %>% 
+  filter(term == 'BB') %>%
+  ggplot(aes(yearID, estimate)) +
+  geom_point() +
+  geom_smooth(method = 'lm')
+```
+
+#### Question 11
+
+Fit a linear model on the results from Question 10 to determine the effect of year on the impact of BB. That is, determine how the estimated coefficients of BB from the models in Question 10 can be predicted by the year (recall that we grouped the data by year before fitting the models, so we have different estimated coefficients for each year).
+```{r}
+fit <- fit %>% filter(term == 'BB') %>% select(yearID,estimate) %>% 
+  do(tidy(lm(estimate ~ yearID, data = .)))
+```
+For each additional year, by what value does the impact of BB on runs change?
+```{r}
+fit %>% filter(term == 'yearID') %>% pull(estimate)
+```
+What is the p-value for this effect?
+```{r}
+fit %>% filter(term == 'yearID') %>% pull(p.value)
+```
+
+
+
+## Assessment: Linear Models (Verified Learners only)
+
+This assessment has 6 multi-part questions that will all use the setup below.\
+Game attendance in baseball varies partly as a function of how well a team is playing.\
+Load the Lahman library. The Teams data frame contains an attendance column. This is the total attendance for the season. To calculate average attendance, divide by the number of games played, as follows:
+```{r}
+library(tidyverse)
+library(broom)
+library(Lahman)
+Teams_small <- Teams %>% 
+    filter(yearID %in% 1961:2001) %>% 
+    mutate(avg_attendance = attendance/G)
+```
+
+#### Question 1a
+
+Use runs (R) per game to predict average attendance.\
+For every 1 run scored per game, average attendance increases by how much?
+```{r}
+Teams_small %>% mutate(RG = R/G) %>% 
+  do(tidy(lm(avg_attendance ~ RG, data = .))) %>% 
+  filter(term == 'RG') %>% pull(estimate)
+```
+Use home runs (HR) per game to predict average attendance.\
+For every 1 home run hit per game, average attendance increases by how much?
+```{r}
+Teams_small %>% mutate(HRG = HR/G) %>% 
+  do(tidy(lm(avg_attendance ~ HRG, data = .))) %>% 
+  filter(term == 'HRG') %>% pull(estimate)
+```
+
+#### Question 1b
+
+Use number of wins to predict average attendance; do not normalize for number of games.\
+For every game won in a season, how much does average attendance increase?
+```{r}
+Teams_small %>% do(tidy(lm(avg_attendance ~ W, data = .))) %>% 
+  filter(term == 'W') %>% pull(estimate)
+```
+Suppose a team won zero games in a season.\
+Predict the average attendance.
+```{r}
+Teams_small %>% do(tidy(lm(avg_attendance ~ W, data = .))) %>% 
+  filter(term == '(Intercept)') %>% pull(estimate)
+```
+
+#### Question 1c
+
+Use year to predict average attendance.\
+How much does average attendance increase each year?
+```{r}
+Teams_small %>% do(tidy(lm(avg_attendance ~ yearID, data = .)))
+```
+
+#### Question 2
+
+Game wins, runs per game and home runs per game are positively correlated with attendance. We saw in the course material that runs per game and home runs per game are correlated with each other. Are wins and runs per game or wins and home runs per game correlated? Use the Teams_small data once again.\
+What is the correlation coefficient for runs per game and wins?
+```{r}
+Teams_small %>% mutate(RG = R/G) %>% summarise(cor(RG,W))
+```
+What is the correlation coefficient for home runs per game and wins?
+```{r}
+Teams_small %>% mutate(HRG = HR/G) %>% summarise(cor(HRG,W))
+```
+
+#### Question 3
+
+Stratify Teams_small by wins: divide number of wins by 10 and then round to the nearest integer. Filter to keep only strata 5 through 10. (The other strata have fewer than 20 data points, too few for our analyses).
+```{r}
+WTS <- Teams_small %>% mutate(W = round(W/10), RG = R/G, HRG = HR/G) %>% group_by(W) %>% filter(W %in% 5:10)
+```
+
+
+#### Question 3a
+
+How many observations are in the 8 win strata?
+```{r}
+WTS %>% filter(W == 8) %>% nrow()
+```
+
+#### Question 3b
+Calculate the slope of the regression line predicting average attendance given runs per game for each of the win strata.\
+Which win stratum has the largest regression line slope?
+```{r}
+WTS %>% do(tidy(lm(avg_attendance ~ RG, data = .))) %>% filter(term == 'RG')
+```
+Calculate the slope of the regression line predicting average attendance given HR per game for each of the win strata.\
+Which win stratum has the largest regression line slope?
+```{r}
+WTS %>% do(tidy(lm(avg_attendance ~ HRG, data = .))) %>% filter(term == 'HRG')
+```
+
+#### Question 4
+Fit a multivariate regression determining the effects of runs per game, home runs per game, wins, and year on average attendance. Use the original Teams_small wins column, not the win strata from question 3.\
+What is the estimate of the effect of runs per game, home runs per game and wins on average attendance?
+```{r}
+Teams_small <- Teams_small %>% mutate(RG = R/G, HRG = HR/G)
+Teams_small %>% do(tidy(lm(avg_attendance ~ RG + HRG + W + yearID, data = .)))
+```
+#### Question 5
+
+Use the multivariate regression model from Question 4. Suppose a team averaged 5 runs per game, 1.2 home runs per game, and won 80 games in a season. Use the predict() function to generate predictions for this team.\
+What would this team's average attendance be in 2002?
+```{r}
+fit <- Teams_small %>% 
+  lm(avg_attendance ~ RG + HRG + W + yearID, data = .)
+
+predict(fit, data.frame(RG = 5, HRG = 1.2, W = 80, yearID = 2002))
+```
+What would this team's average attendance be in 1960?
+```{r}
+predict(fit, data.frame(RG = 5, HRG = 1.2, W = 80, yearID = 1960))
+```
+#### Question 6
+
+Use your model from Question 4 to predict average attendance for teams in 2002 in the original Teams data frame.\
+What is the correlation between the predicted attendance and actual attendance?
+```{r}
+newdata <- Teams %>%
+    filter(yearID == 2002) %>%
+    mutate(avg_attendance = attendance/G,
+           RG = R/G,
+           HRG = HR/G)
+preds <- predict(fit, newdata)
+cor(preds, newdata$avg_attendance)
+```
+
+
+
+# Section 3: Confounding
+
+```{r}
+library(tidyverse)
+library(dplyr)
+```
+
+
+
+### Correlation is Not Causation
+
+Association/correlation is not causation.\
+p-hacking is a topic of much discussion because it is a problem in scientific publications. Because publishers tend to reward statistically significant results over negative results, there is an incentive to report significant results.
+```{r}
+# generate the Monte Carlo simulation
+N <- 25
+g <- 1000000
+sim_data <- tibble(group = rep(1:g, each = N), x = rnorm(N * g), y = rnorm(N * g))
+
+# calculate correlation between X,Y for each group
+res <- sim_data %>% 
+  group_by(group) %>% 
+  summarize(r = cor(x, y)) %>% 
+  arrange(desc(r))
+res
+
+# plot points from the group with maximum correlation
+sim_data %>% filter(group == res$group[which.max(res$r)]) %>%
+  ggplot(aes(x, y)) +
+  geom_point() + 
+  geom_smooth(method = "lm")
+  
+# histogram of correlation in Monte Carlo simulations
+res %>% ggplot(aes(x=r)) + geom_histogram(binwidth = 0.1, color = "black")
+
+# linear regression on group with maximum correlation
+library(broom)
+sim_data %>% 
+  filter(group == res$group[which.max(res$r)]) %>%
+  summarize(tidy(lm(y ~ x)))
+```
+
+
+### Outliers
+
+Correlations can be caused by outliers.\
+The Spearman correlation is calculated based on the ranks of data.
+```{r}
+# simulate independent X, Y and standardize all except entry 23
+# note that you may get different values than those shown in the video depending on R version
+set.seed(1985)
+x <- rnorm(100,100,1)
+y <- rnorm(100,84,1)
+x[-23] <- scale(x[-23])
+y[-23] <- scale(y[-23])
+
+# plot shows the outlier
+qplot(x, y, alpha = 0.5) + theme(legend.position = 'none')
+
+# outlier makes it appear there is correlation
+cor(x,y) # correlation with outlier
+cor(x[-23], y[-23]) # correlation without outlier
+
+# use rank instead
+qplot(rank(x), rank(y))
+cor(rank(x), rank(y))
+
+# Spearman correlation with cor function
+cor(x, y, method = "spearman")
+```
+
+
+### Reversing Cause and Effect
+
+Another way association can be confused with causation is when the cause and effect are reversed.\
+As discussed in the video, in the Galton data, when father and son were reversed in the regression, the model was technically correct. The estimates and p-values were obtained correctly as well. What was incorrect was the interpretation of the model.
+```{r}
+# cause and effect reversal using son heights to predict father heights
+library(HistData)
+data("GaltonFamilies")
+set.seed(1983)
+galton_heights <- GaltonFamilies %>%
+  filter(gender == "male") %>%
+  group_by(family) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  select(father, childHeight) %>%
+  rename(son = childHeight)
+
+galton_heights %>% summarize(tidy(lm(father ~ son)))
+```
+
+
+### Confounders
+
+If X and Y are correlated, we call Z a confounder if changes in Z causes changes in both X and Y.
+```{r}
+# UC-Berkeley admission data
+library(dslabs)
+data(admissions)
+admissions
+
+# percent men and women accepted
+admissions %>% group_by(gender) %>% 
+  summarize(percentage = 
+              round(sum(admitted*applicants)/sum(applicants),1))
+              
+# test whether gender and admission are independent
+admissions %>% group_by(gender) %>% 
+  summarize(total_admitted = round(sum(admitted / 100 * applicants)), 
+            not_admitted = sum(applicants) - sum(total_admitted)) %>%
+  select(-gender) %>% 
+  summarize(tidy(chisq.test(.)))
+  
+# percent admissions by major
+admissions %>% select(major, gender, admitted) %>%
+  pivot_wider(names_from = gender, values_from = admitted) %>%
+  mutate(women_minus_men = women - men)
+  
+# plot total percent admitted to major versus percent women applicants
+admissions %>% 
+  group_by(major) %>% 
+  summarize(major_selectivity = sum(admitted * applicants) / sum(applicants),
+            percent_women_applicants = sum(applicants * (gender=="women")) /
+                                             sum(applicants) * 100) %>%
+  ggplot(aes(major_selectivity, percent_women_applicants, label = major)) +
+  geom_text()
+  
+# plot percent of applicants accepted by gender
+admissions %>% 
+  mutate(percent_admitted = admitted*applicants/sum(applicants)) %>%
+  ggplot(aes(gender, y = percent_admitted, fill = major)) +
+  geom_bar(stat = "identity", position = "stack")
+
+# plot admissions stratified by major
+admissions %>% 
+  ggplot(aes(major, admitted, col = gender, size = applicants)) +
+  geom_point()
+
+# average difference by major
+admissions %>%  group_by(gender) %>% summarize(average = mean(admitted))
+```
+
+
+### Simpson's Paradox
+
+Simpson’s Paradox happens when we see the sign of the correlation flip when comparing the entire dataset with specific strata.
+```{r}
+## Trying to recreate the plots on the explanation of the Sympson's paradox
+library(tidyverse)
+library(palmerpenguins)
+
+penguin_df <- palmerpenguins::penguins %>% na.omit()
+penguin_df <- penguin_df %>%
+  mutate(bill_length_mm = ifelse(species == 'Gentoo', bill_length_mm + 5, bill_length_mm), bill_depth_mm = ifelse(species == 'Gentoo', bill_depth_mm + 1.5, bill_depth_mm)) %>% 
+  mutate(bill_length_mm = ifelse(species == 'Adelie', bill_length_mm + 2, bill_length_mm), bill_depth_mm = ifelse(species == 'Adelie', bill_depth_mm + 1.5, bill_depth_mm)) # modifying the data for visualization purposes
+
+chin <- penguin_df %>%
+  filter(species == "Chinstrap")
+adelie <- penguin_df %>%
+  filter(species == "Adelie")
+gentoo <- penguin_df %>%
+  filter(species == "Gentoo")
+
+lm_peng <- lm(bill_depth_mm ~ bill_length_mm, data=penguin_df)
+lm_chin <- lm(bill_depth_mm ~ bill_length_mm, data=chin)
+lm_adelie <- lm(bill_depth_mm ~ bill_length_mm, data=adelie)
+lm_gentoo <- lm(bill_depth_mm ~ bill_length_mm, data=gentoo)
+
+penguin_df %>% 
+  ggplot(aes(x = bill_length_mm, y = bill_depth_mm)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = lm_peng$coefficients[[2]], intercept = lm_peng$coefficients[[1]], color="black") +
+  labs(x="Length", y="Depth", title="Regression of Depth as a function of Length") +
+  theme_classic()
+
+penguin_df %>% 
+  ggplot(aes(x = bill_length_mm, y = bill_depth_mm, color = species)) + 
+  geom_point() +
+  geom_abline(slope = lm_chin$coefficients[[2]], intercept = lm_chin$coefficients[[1]], color="black") +
+  geom_abline(slope = lm_adelie$coefficients[[2]], intercept = lm_adelie$coefficients[[1]], color="black") +
+  geom_abline(slope = lm_gentoo$coefficients[[2]], intercept = lm_gentoo$coefficients[[1]], color="black") +
+  labs(x="Length", y="Depth", title="Regression of Depth as a function of Length") +
+  theme_classic()
+```
+
+
+
+# Assessment: Confounding (Verified Learners only)
+
+For this set of exercises, we examine the data from a [2014 PNAS paper that analyzed success rates from funding agencies in the Netherlands](https://www.pnas.org/doi/abs/10.1073/pnas.1510159112) and concluded:\
+<div align="center"> *"our results reveal gender bias favoring male applicants over female applicants in the prioritization of their "quality of researcher" (but not "quality of proposal") evaluations and success rates, as well as in the language used in instructional and evaluation materials."* </div>\
+A response was published a few months later titled [No evidence that gender contributes to personal research funding success in The Netherlands: A reaction to Van der Lee and Ellemers](http://www.pnas.org/content/112/51/E7036.extract), which concluded:\
+<div align="center"> *However, the overall gender effect borders on statistical significance, despite the large sample. Moreover, their conclusion could be a prime example of Simpson’s paradox; if a higher percentage of women apply for grants in more competitive scientific disciplines (i.e., with low application success rates for both men and women), then an analysis across all disciplines could incorrectly show "evidence" of gender inequality.* </div>\
+Who is right here: the original paper or the response? Here, you will examine the data and come to your own conclusion.\
+The main evidence for the conclusion of the original paper comes down to a comparison of the percentages. The information we need was originally in Table S1 in the paper, which we include in **dslabs**:
+```{r}
+library(dslabs)
+data("research_funding_rates")
+research_funding_rates
+```
+
+## Question 1
+
+Construct a two-by-two table of gender (men/women) by award status (awarded/not) using the total numbers across all disciplines.
+```{r}
+award_gender <- research_funding_rates %>% 
+  select(applications_men, applications_women, awards_men, awards_women) %>% 
+  summarize_all(funs(sum)) %>%
+  summarize(yes_men = awards_men, 
+            no_men = applications_men - awards_men, 
+            yes_women = awards_women, 
+            no_women = applications_women - awards_women) %>%
+  gather %>%
+  separate(key, c("awarded", "gender")) %>%
+  spread(gender, value)
+```
+
+#### What is the number of men not awarded?
+```{r}
+award_gender %>% filter(awarded == 'no') %>% pull(men)
+```
+
+#### What is the number of women not awarded?
+```{r}
+award_gender %>% filter(awarded == 'no') %>% pull(women)
+```
+
+## Question 2
+
+Use the two-by-two table from Question 1 to compute the percentages of men awarded versus women awarded.
+```{r}
+award_gender_per <- award_gender %>% 
+  mutate(men = round(men/sum(men)*100, 1), women = round(women/sum(women)*100, 1))
+```
+
+#### What is the percentage of men awarded
+```{r}
+award_gender_per %>% filter(awarded == 'yes') %>% pull(men)
+```
+
+#### What is the percentage of men awarded
+```{r}
+award_gender_per %>% filter(awarded == 'yes') %>% pull(women)
+```
+
+
+## Question 3
+
+Run a [chi-squared test](https://rafalab.github.io/dsbook/inference.html#chi-square-test) on the two-by-two table to determine whether the difference in the two funding awarded rates is significant. (You can use tidy() to turn the output of chisq.test() into a data frame as well.)\
+What is the p-value of the difference in funding awarded rate?
+```{r}
+award_gender %>% select(-awarded) %>% chisq.test() %>% tidy()
+```
+
+
+## Question 4
+
+There may be an association between gender and funding. But can we infer causation here? Is gender bias causing this observed difference? The response to the original paper claims that what we see here is similar to the UC Berkeley admissions example. Specifically they state that this "could be a prime example of Simpson’s paradox; if a higher percentage of women apply for grants in more competitive scientific disciplines, then an analysis across all disciplines could incorrectly show 'evidence' of gender inequality."\
+To settle this dispute, use this dataset with number of applications, awards, and success rate for each gender:
+```{r}
+dat <- research_funding_rates %>% 
+      mutate(discipline = reorder(discipline, success_rates_total)) %>%
+      rename(success_total = success_rates_total,
+             success_men = success_rates_men,
+             success_women = success_rates_women) %>%
+      pivot_longer(-discipline) %>%
+      separate(name, c("type", "gender")) %>%
+      pivot_wider(names_from = type, values_from = value) %>%
+      filter(gender != "total")
+dat
+```
+
+To check if this is a case of Simpson's paradox, plot the success rates versus disciplines, which have been ordered by overall success, with colors to denote the genders and size to denote the number of applications.\
+```{r}
+dat %>% group_by(gender) %>% 
+  ggplot(aes(discipline, success, color = gender, size = applications)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_point()
+```
+
